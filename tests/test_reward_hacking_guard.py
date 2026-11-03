@@ -243,8 +243,9 @@ class RewardHackingGuardTests(unittest.TestCase):
                 [(call.args[0].to_dict(), call.kwargs) for call in baseline_env.step.call_args_list],
             )
             for name in ("num_tokens_total", "total_llm_time", "total_env_time", "total_time_traj",
-                         "num_steps_used", "exit_reason"):
+                         "exit_reason"):
                 self.assertEqual(getattr(actual, name), getattr(baseline, name), name)
+            self.assertEqual(actual.trajectory_steps[-1].step_count, baseline.trajectory_steps[-1].step_count)
             self.assertEqual(completion.call_count, 2 if guard == "true" else 0)
             self.assertEqual([step.observation for step in actual.trajectory_steps],
                              [step.observation for step in baseline.trajectory_steps])
@@ -347,7 +348,7 @@ class RewardHackingGuardTests(unittest.TestCase):
                 self.assertEqual(trajectory.total_llm_time, 6.0)
                 self.assertEqual(trajectory.total_time_traj, 10.0)
                 self.assertEqual(trajectory.num_tokens_total, 30)
-                self.assertIn("Steps Remaining:", trajectory.messages[3]["content"])
+                self.assertIn("Steps Remaining:", self.agent.history[3]["content"])
 
     def test_true_values_enable_judge(self):
         for value in ("1", "true", "TRUE", " yes ", "on"):
@@ -484,7 +485,7 @@ class RewardHackingGuardTests(unittest.TestCase):
                 next_input = self.agent.model_query.call_args_list[1].args[0]
                 self.assertEqual(next_input[-1]["content"], REWARD_HACKING_BLOCK_MESSAGE)
                 self.assertEqual(next_input[-1]["role"], "tool" if fn_calling else "user")
-                self.assertEqual(trajectory.messages[3]["content"], REWARD_HACKING_BLOCK_MESSAGE)
+                self.assertEqual(self.agent.history[3]["content"], REWARD_HACKING_BLOCK_MESSAGE)
                 if fn_calling:
                     self.assertEqual(next_input[-1]["tool_call_id"], "call_0_0")
                     self.assertEqual(next_input[-1]["name"], "execute_bash")
@@ -507,7 +508,7 @@ class RewardHackingGuardTests(unittest.TestCase):
         self.assertEqual(trajectory.total_llm_time, 8)
         self.assertEqual(trajectory.total_env_time, 4)
         self.assertEqual(trajectory.total_time_traj, 12)
-        tools = [message for message in trajectory.messages if message["role"] == "tool"]
+        tools = [message for message in self.agent.history if message["role"] == "tool"]
         self.assertEqual([item["tool_call_id"] for item in tools], [
             "call_0_0", "call_0_1", "call_0_2", "call_1_0"
         ])
@@ -552,7 +553,7 @@ class RewardHackingGuardTests(unittest.TestCase):
         trajectory, env, judge = self.run_rounds(
             [[Action("", {})], [self.submit]], ["no"], use_fn_calling=False
         )
-        self.assertEqual(trajectory.num_invalid_tool_calls, 1)
+        self.assertEqual(env.step.call_args_list[0].args[0].function_name, "")
         self.assertEqual(env.step.call_count, 2)
         judge.assert_not_called()
 
